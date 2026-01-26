@@ -1,4 +1,4 @@
-### How DNS Resolution works in Local setup
+# How DNS Resolution works in Local setup
 ![DNS Resolution](../../Images/dns_resolution2.png)
 ***
 - ping google.com = ping calls system resolver library (getaddrinfo() = Resolver now)
