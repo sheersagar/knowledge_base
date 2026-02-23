@@ -113,7 +113,7 @@ Configured the following fields:
 |-----|------|--------|
 Port alias | `<task-def-as-it-is>` | Container port mapping |
 Discovery | `<anything>` | Logical service name |
-DNS | `<anything>-<namespace>` | Let ECS derive DNS |
+DNS | `<anything>.<namespace>` | Let ECS derive DNS |
 Port | `8080` | Application port |
 
 **Important**
