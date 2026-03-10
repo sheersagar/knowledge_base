@@ -1,4 +1,4 @@
-# MariaDB — SQL Quick Reference
+# MySQL — SQL Quick Reference
 
 ---
 
@@ -6,37 +6,42 @@
 
 **Basic connection:**
 ```bash
-mariadb -h <host> -P <port> -u <user> -p
+mysql -h <host> -P <port> -u <user> -p
 ```
 
 **Connect and select a database directly:**
 ```bash
-mariadb -h <host> -P <port> -u <user> -p <database>
+mysql -h <host> -P <port> -u <user> -p <database>
 ```
 
 **Connect via socket (localhost only):**
 ```bash
-mariadb -u <user> -p
+mysql -u <user> -p
+```
+
+**Connect via SSL (recommended for RDS):**
+```bash
+mysql -h <host> -u <user> -p --ssl-ca=<path-to-ca-cert.pem>
 ```
 
 **Connect via SSH tunnel (tunnel must be open first):**
 ```bash
-mariadb -h 127.0.0.1 -P 3307 -u <user> -p
+mysql -h 127.0.0.1 -P 3307 -u <user> -p
 ```
 
 **Run a single query without entering the shell:**
 ```bash
-mariadb -h <host> -u <user> -p<password> -e "SHOW DATABASES;"
+mysql -h <host> -u <user> -p<password> -e "SHOW DATABASES;"
 ```
 
 **Export a database dump:**
 ```bash
-mariadump -h <host> -u <user> -p <database> > dump.sql
+mysqldump -h <host> -u <user> -p <database> > dump.sql
 ```
 
 **Import a SQL file:**
 ```bash
-mariadb -h <host> -u <user> -p <database> < dump.sql
+mysql -h <host> -u <user> -p <database> < dump.sql
 ```
 
 ---
@@ -45,7 +50,7 @@ mariadb -h <host> -u <user> -p <database> < dump.sql
 
 **List all users:**
 ```sql
-SELECT user, host, password_expired, is_role
+SELECT user, host, account_locked, password_expired
 FROM mysql.user
 ORDER BY user;
 ```
@@ -68,9 +73,7 @@ ORDER BY user;
 
 **Find users with SUPER privilege:**
 ```sql
-SELECT user, host
-FROM mysql.user
-WHERE Super_priv = 'Y';
+SELECT user, host FROM mysql.user WHERE Super_priv = 'Y';
 ```
 
 ---
