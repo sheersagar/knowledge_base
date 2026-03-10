@@ -400,6 +400,33 @@ __Admin permission policy__
   ]
 }
 ```
+---
+## 4. Policy Evaluation Logic
+![Policy evaluation](../../../Images/policy_evaluation_logic.png)
+These are the policies that AWS use to decide what principal has what level of access of resources.
+- Gather all of the policies that apply to that access requested.
+- Explicit Deny ---> No ------> SCPs (only AWS Organization)
+- If no or Allow SCPs ----> Resource policies (Policies that are separately attached to resources like S3, KMS, etc {Not All AWS resources support Resource policy})
+- If no Resource policies ----> Permission boundary (if attached)
+- If no Permission boundary ----> IAM policy
 
+## 5. Resource Access Manager (RAM)
+![RAM](../../../Images/RAM.png)
+- Subnet by Owner is shared accross Organization.
+---
+- Shares AWS resource between `AWS Accounts.`
+- `Products` (e.g., subnet) needs to support RAM.
+- Shared resources can be accessed natively (Console UI or CLI).
+- No cost for using RAM ---> Only the service cost.
+- Owner account `creates a share`, provide a name.
+- Owner retains full ownership.
+- Define the `principal` with whom to share that resource.
+- If participant is inside an ORG with sharing enabled it's `accepted automatically`.
+- 
 
 ---
+![Availability Zone](../../../Images/naming_AZ.png)
+- AWS rotate their facility, your us-east-1a might be us-east-1b for another and vice-versa.
+- AWS implemented Availability Zone IDs to rectify this confusion.
+    - **use1-az1 and use1-az2** = They are consistent accross accounts.
+
