@@ -835,3 +835,324 @@ This expired certificate needs to be renewed before production cutover to avoid 
 
 *Document prepared for Infinite Locus Pvt. Ltd.*  
 *Full migration story: On-Premise → AWS MGN → EC2 Windows Server → MailEnable test domain setup*
+
+---
+
+## Phase 3B — Fresh Server MailEnable Configuration
+
+This section covers configuring MailEnable on a freshly launched MGN test instance. This is required every time a new test instance is launched because MGN spawns a clean EC2 from replicated data — any previous MailEnable configurations are not carried over.
+
+---
+
+### Opening MailEnable Admin Console
+
+Unlike the previous server where `MEAdmin.exe` was available, this version of MailEnable uses a different admin console located at:
+
+```
+C:\Program Files (x86)\Mail Enable\Admin\MailEnableAdmin.msc
+```
+
+Open via **Windows + R**:
+```
+C:\Program Files (x86)\Mail Enable\Admin\MailEnableAdmin.msc
+```
+
+Or create a persistent shortcut via PowerShell:
+
+```powershell
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\MailEnable Admin.lnk")
+$Shortcut.TargetPath = "mmc.exe"
+$Shortcut.Arguments = "`"C:\Program Files (x86)\Mail Enable\Admin\MailEnableAdmin.msc`""
+$Shortcut.WorkingDirectory = "C:\Program Files (x86)\Mail Enable\Admin"
+$Shortcut.Save()
+
+$Shortcut2 = $WshShell.CreateShortcut("C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MailEnable Admin.lnk")
+$Shortcut2.TargetPath = "mmc.exe"
+$Shortcut2.Arguments = "`"C:\Program Files (x86)\Mail Enable\Admin\MailEnableAdmin.msc`""
+$Shortcut2.WorkingDirectory = "C:\Program Files (x86)\Mail Enable\Admin"
+$Shortcut2.Save()
+```
+
+> **Note:** The console opens at Post Offices view by default. Press the **Home key** in the left panel to navigate up to the full `MailEnable Management` root tree.
+
+![MailEnable Admin Console Full Tree — New Server](../../Images/14-new-server-mmc-tree.png)
+
+---
+
+### Creating the Post Office
+
+Right-click **Post Offices** in the left panel → **New Post Office**:
+
+![Create New Post Office Dialog](../../Images/15-create-postoffice.png)
+
+```
+Post Office Name: <project-name>staging
+Password:         <set a strong password>
+Confirm Password: <same>
+→ OK
+```
+
+> **Why short name:** Post Office names must be under 20 characters with no dots or special characters. Use a short identifier — the actual domain is added separately under Domains.
+
+Then add the domain:
+```
+Post Offices → <project-name>staging → Domains
+→ Right-click → Add Domain
+    Domain Name: <project-name>.staging.<testing-root-domain>
+    Postmaster:  postmaster
+    → OK → No (when aliases popup appears)
+```
+
+---
+
+### Creating Mailboxes
+
+```
+Post Offices → <project-name>staging → Mailboxes
+→ Right-click → New Mailbox
+```
+
+![Create New Mailbox Dialog](../../Images/16-create-mailbox.png)
+
+Create two mailboxes:
+
+```
+Mailbox 1:
+  Name:     admin
+  Password: <set password>
+  Type:     USER
+
+Mailbox 2:
+  Name:     testuser
+  Password: Admin@123
+  Type:     USER
+```
+
+After creation, three mailboxes should be listed:
+```
+admin        Enabled  Unlimited
+postmaster   Enabled  Unlimited  ← auto-created with Post Office
+testuser     Enabled  Unlimited
+```
+
+![Mailboxes List — admin, postmaster, testuser](../../Images/02-mailenable-mailboxes.png)
+
+---
+
+### SMTP Connector Configuration
+
+```
+Servers → localhost → Services and Connectors → SMTP
+→ Right-click → Properties
+```
+
+**General tab:**
+
+![SMTP Connector — General Tab](../../Images/03-smtp-general.png)
+
+```
+Local Domain Name:          mail.<project-name>.staging.<testing-root-domain>
+Default mail domain name:   <project-name>.staging.<testing-root-domain>
+DNS Address(es):            8.8.8.8 8.8.4.4
+Notification email:         postmaster@<project-name>.staging.<testing-root-domain>
+```
+
+**Inbound tab:**
+
+![SMTP Connector — Inbound Tab](../../Images/04-smtp-inbound.png)
+
+```
+Port 25:  enabled  ← server-to-server inbound
+Port 587: enabled  ← authenticated client submission
+✅ STARTTLS enabled
+```
+
+**Relay tab:**
+
+![SMTP Connector — Relay Tab](../../Images/05-smtp-relay.png)
+
+```
+✅ Allow Mail Relay
+✅ Allow relay for authenticated senders only
+❌ Allow relay for privileged IP ranges
+❌ Allow relay for local sender addresses  ← NEVER enable this
+```
+
+**Security tab:**
+
+![SMTP Connector — Security Tab](../../Images/06-smtp-security.png)
+
+```
+✅ Sender email domain must be local or resolvable through DNS
+✅ Authenticated senders must use address from their postoffice
+PTR Record Check: Reject mail from senders without PTR records
+```
+
+**DNS Blacklisting tab:**
+
+![SMTP Connector — DNS Blacklisting Tab](../../Images/07-smtp-dnsbl.png)
+
+```
+✅ Enable DNS blacklisting
+→ Add: SpamhausZEN
+→ Add: Spamcop
+→ Add: Barracuda Reputation Block List
+
+✅ Enable URL Blacklisting
+→ Add: dbl.spamhaus.org
+```
+
+**Delivery tab:**
+```
+Failed message lifetime: 72 hours
+✅ Only generate NDRs for senders who authenticate
+✅ Limit concurrent connections: 20
+```
+
+**Advanced SMTP tab:**
+```
+✅ Add required headers for authenticated senders
+❌ EXPN command  ← disable
+❌ HELP command  ← disable
+```
+
+**Smart Host tab:**
+```
+❌ Smart Host Enabled  ← leave disabled (direct delivery via port 25)
+```
+
+→ **Apply → OK**
+
+---
+
+### DKIM Key Generation
+
+Run in PowerShell as Administrator:
+
+```powershell
+$rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider(2048)
+$privateKeyBytes = $rsa.ExportCspBlob($true)
+$privateKeyB64 = [Convert]::ToBase64String($privateKeyBytes, 'InsertLineBreaks')
+$privateKeyPem = "-----BEGIN RSA PRIVATE KEY-----`r`n$privateKeyB64`r`n-----END RSA PRIVATE KEY-----"
+$privateKeyPem | Out-File "C:\Program Files (x86)\Mail Enable\Config\DKIM\default-<project-name>.staging.<testing-root-domain>.key" -Encoding ASCII
+
+$dkimConfig = '<BASEELEMENT><ELEMENT><TYPE>Selector</TYPE><SELECTORNAME>default</SELECTORNAME><DNS-TXT>v=DKIM1; </DNS-TXT></ELEMENT><ELEMENT><TYPE>Options</TYPE><ACTIVESELECTOR>default</ACTIVESELECTOR><KEYFILE>default-<project-name>.staging.<testing-root-domain>.key</KEYFILE><SIGN>1</SIGN><HASHALGORITHM>rsa-sha256</HASHALGORITHM><HEADERCANONICALIZATION>relaxed</HEADERCANONICALIZATION><BODYCANONICALIZATION>relaxed</BODYCANONICALIZATION><LIMITBODYHASHLENGTH>-1</LIMITBODYHASHLENGTH><INCLUDEUSERIDENTITY>0</INCLUDEUSERIDENTITY></ELEMENT></BASEELEMENT>'
+$dkimConfig | Out-File "C:\Program Files (x86)\Mail Enable\Config\DKIM-<project-name>.staging.<testing-root-domain>.SYS" -Encoding ASCII
+```
+
+Extract public key for DNS:
+
+```powershell
+$rsa2 = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+$rawKey = (Get-Content "C:\Program Files (x86)\Mail Enable\Config\DKIM\default-<project-name>.staging.<testing-root-domain>.key" -Raw)
+$b64 = $rawKey -replace "-----BEGIN RSA PRIVATE KEY-----|-----END RSA PRIVATE KEY-----" -replace "\s",""
+$rsa2.ImportCspBlob([Convert]::FromBase64String($b64))
+$params = $rsa2.ExportParameters($false)
+
+function Encode-DERLength($len) {
+    if ($len -lt 128) { return [byte[]]@($len) }
+    elseif ($len -lt 256) { return [byte[]]@(0x81, $len) }
+    else { return [byte[]]@(0x82, [byte](($len -shr 8) -band 0xFF), [byte]($len -band 0xFF)) }
+}
+function Encode-DERInteger($bytes) {
+    if ($bytes[0] -band 0x80) { $bytes = @([byte]0x00) + $bytes }
+    return @([byte]0x02) + (Encode-DERLength $bytes.Length) + $bytes
+}
+$modInt = Encode-DERInteger $params.Modulus
+$expInt = Encode-DERInteger $params.Exponent
+$seqContent = $modInt + $expInt
+$sequence = @([byte]0x30) + (Encode-DERLength $seqContent.Length) + $seqContent
+Write-Host "p=$([Convert]::ToBase64String([byte[]]$sequence))"
+```
+
+Add the output to GoDaddy DNS:
+
+```
+Type:   TXT
+Name:   default._domainkey.<project-name>.staging
+Value:  v=DKIM1; k=rsa; p=<output from above>
+TTL:    600
+```
+
+---
+
+### Webmail IIS Binding
+
+```powershell
+New-WebBinding -Name "MailEnable WebMail" -Protocol "http" -Port 80 -HostHeader "webmail.<project-name>.staging.<testing-root-domain>"
+```
+
+Add DNS A record in GoDaddy:
+```
+Type:  A
+Name:  webmail.<project-name>.staging
+Value: <your-elastic-ip>
+TTL:   600
+```
+
+Access webmail at:
+```
+http://webmail.<project-name>.staging.<testing-root-domain>/Mondo/lang/sys/Login.aspx
+```
+
+![MailEnable Webmail Login Page](../../Images/21-webmail-login-new.png.png)
+
+Login format:
+```
+Username: testuser@<project-name>staging    ← Post Office name, not full domain
+Password: <your password>
+```
+
+---
+
+### Restart Services
+
+```powershell
+Restart-Service "MailEnable SMTP Connector"
+Restart-Service "MailEnable Mail Transfer Agent"
+```
+
+---
+
+### Plesk License Retrieval
+
+```powershell
+& "C:\Program Files (x86)\Plesk\bin\plesk.exe" bin license --retrieve
+```
+
+Expected output:
+```
+Updating license key EXT.XXXXXXXXX.XXXX: Done
+```
+
+---
+
+### Windows Firewall Rules
+
+```powershell
+New-NetFirewallRule -DisplayName "MailEnable SMTP" -Direction Inbound -Protocol TCP -LocalPort 25 -Action Allow
+New-NetFirewallRule -DisplayName "MailEnable Submission" -Direction Inbound -Protocol TCP -LocalPort 587 -Action Allow
+New-NetFirewallRule -DisplayName "MailEnable IMAP SSL" -Direction Inbound -Protocol TCP -LocalPort 993 -Action Allow
+New-NetFirewallRule -DisplayName "MailEnable POP3 SSL" -Direction Inbound -Protocol TCP -LocalPort 995 -Action Allow
+New-NetFirewallRule -DisplayName "MailEnable IMAP" -Direction Inbound -Protocol TCP -LocalPort 143 -Action Allow
+```
+
+---
+
+### Phase 3B Checklist
+
+```
+□ Windows Firewall rules added
+□ Post Office created (<project-name>staging)
+□ Domain added (<project-name>.staging.<testing-root-domain>)
+□ Mailboxes created (admin, testuser)
+□ SMTP Connector configured (all tabs)
+□ DKIM key generated
+□ DKIM TXT record added to GoDaddy
+□ Webmail IIS binding added
+□ Services restarted
+□ Plesk license retrieved
+□ Send test mail → confirm delivery
+□ Receive test mail → confirm inbound
+```
