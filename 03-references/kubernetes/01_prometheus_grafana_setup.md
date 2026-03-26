@@ -1,10 +1,5 @@
-# ZFW Preprod EKS — Observability Stack Setup Documentation
+# Observability Stack Setup Documentation
 
-**Cluster:** zfw-preprod-ind  
-**Region:** ap-south-1  
-**Account:** 139868136390  
-**Date:** 26 March 2026  
-**Author:** Vishav Deshwal  
 
 ---
 
