@@ -469,10 +469,20 @@ sudo systemctl enable mariadb
 
 ```bash
 sudo mysql_secure_installation
-# Set root password, remove anonymous users, disallow remote root login
+# Set root password (type root password)
+# Switch to unix socket authentication: n
+# Change root password: n
+# remove anonymous users: Y
+# disallow remote root login: Y
+# Remove test database and access to it: Y
+# Reload priviledged tables now: Y
+# All done!  If you've completed all of the above steps, your MariaDB
+  #installation should now be secure.
+  #Thanks for using MariaDB!
 ```
 
 ### Configure MariaDB for Frappe
+Sometimes vim editor is not installed, if while pasting the below command gives error, make sure you have that specific editor installed. You can install it using `sudo apt install vim`
 
 ```bash
 sudo vi /etc/mysql/mariadb.conf.d/50-server.cnf
@@ -502,11 +512,45 @@ sudo systemctl restart mariadb
 
 Verify the settings were applied:
 ```bash
-mysql -u root -p -e "SHOW VARIABLES LIKE 'character_set_server';"
+sudo mysql -u root -p -e "SHOW VARIABLES LIKE 'character_set_server';"
+
 # Must return: utf8mb4
 ```
 
+| Variable Names        |     Value |
+|-----------------------|-----------|
+| character_set_server  | utf8mb4   |
+
 > **Why utf8mb4?** Frappe stores emoji and multi-byte characters. `utf8` in MySQL only supports 3-byte chars; `utf8mb4` is the true full Unicode set.
+---
+
+### Step 2.1 — Fix MariaDB Socket Authentication
+
+> ⚠️ **CRITICAL — unix_socket Auth Will Break bench**
+> During `mysql_secure_installation`, one prompt asks:
+> ```
+> Switch to unix_socket authentication? [Y/n]
+> ```
+> If you answer **Y** (or press Enter), MariaDB root can only be accessed
+> by the Linux `root` user via socket. The `frappe` Linux user — which bench
+> runs as — uses `pymysql` (Python driver) to connect, not the socket.
+> pymysql gets a 1698 Access Denied regardless of password.
+>
+> **Preventive fix — run this immediately after `mysql_secure_installation`
+> regardless of how you answered the prompt:**
+```bash
+sudo mysql
+```
+```sql
+ALTER USER 'root'@'localhost'
+  IDENTIFIED VIA mysql_native_password
+  USING PASSWORD('<db-root-password>');
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+> This switches root auth to password-based — pymysql can now connect
+> correctly as the frappe Linux user when `bench new-site` runs. **(Mentioned in Step 10)**
 
 ---
 
@@ -571,6 +615,15 @@ wkhtmltopdf --version
 sudo adduser frappe
 sudo usermod -aG sudo frappe
 
+# New Password: [Password]
+# Enter the new value, or press ENTER for the default
+        #Full Name []: <Press Enter>
+        #Room Number []: <Press Enter>
+        #Work Phone []: <Press Enter>
+        #Home Phone []: <Press Enter>
+        #Other      []: <Press Enter>
+        #Is the information correct? [Y/n]: Y
+        # Enter Password: <password>
 # Switch to this user for all remaining steps
 su - frappe
 ```
@@ -641,7 +694,7 @@ The site name is **just an identifier** — not a live DNS requirement at this s
 bench new-site <client-application-name>
 # You will be prompted for:
 # 1. MariaDB root password (from Step 2)
-# 2. Admin password (for ERPNext login)
+# 2. Admin password (for ERPNext login) --> <Anything>
 ```
 
 **What this creates:**
@@ -665,7 +718,7 @@ sites/
 
 ```bash
 # After domain is confirmed
-bench rename-site <client-application-name> erp.<client-application-name>.com
+bench rename-site <application-name> erp.<client-application-name>.com
 ```
 
 Or update the hostname in config without renaming:
@@ -695,6 +748,10 @@ bench --site <client-application-name> install-app erpnext
 **What this does:** Starts all processes (web server, Redis workers, scheduler) via the Procfile. Good for initial verification.
 
 ```bash
+# Set the current site (for testing)
+bench use <site-name>
+
+# Start the site
 bench start
 ```
 
@@ -726,6 +783,7 @@ sudo bench setup production frappe
 ```bash
 # Check if the symlink exists
 ls -l /etc/supervisor/conf.d/
+# total 0
 
 # If empty or frappe-bench.conf is missing — create the symlink manually
 sudo ln -s /home/frappe/frappe-bench/config/supervisor.conf \
