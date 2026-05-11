@@ -191,13 +191,13 @@ fi
 # 7. Bench CLI Install
 # ==============================================================================
 log "Installing bench CLI and Ansible..."
-PIP_CMD="sudo pip3"
+PIP_ARGS=""
 # Check if python 3.12+ (requires --break-system-packages)
 if pip3 --version | grep -qE "python 3\.1[2-9]"; then
-    PIP_CMD="sudo pip3 --break-system-packages"
+    PIP_ARGS="--break-system-packages"
 fi
 
-$PIP_CMD install frappe-bench ansible
+sudo pip3 install $PIP_ARGS frappe-bench ansible
 
 # ==============================================================================
 # 8. Setup Bench & ERPNext (Running as Frappe)
